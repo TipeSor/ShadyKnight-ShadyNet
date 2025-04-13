@@ -4,3 +4,5 @@ ShadyServer/obj/
 ShadyMP/bin/
 ShadyMP/obj/
 ShadyMP/build.sh
+
+TestClient/
