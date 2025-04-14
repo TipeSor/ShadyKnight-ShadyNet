@@ -19,12 +19,14 @@ namespace ShadyMP
 
         internal TcpClient me;
         internal NetworkStream stream;
+        internal StreamReader reader;
+        internal StreamWriter writer;
 
-        string address = "";
-        string port = "";
+        private string address = "";
+        private string port = "";
 
-        ConcurrentDictionary<Guid, UserData> users = [];
-        ConcurrentQueue<Action> beans = new();
+        private readonly ConcurrentDictionary<Guid, UserData> users = [];
+        private readonly ConcurrentQueue<Action> beans = new();
 
         private void Awake()
         {
@@ -90,6 +92,8 @@ namespace ShadyMP
                 me ??= new TcpClient();
                 me.Connect(address, port);
                 stream = me.GetStream();
+                reader = new StreamReader(stream, Encoding.UTF8);
+                writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
 
                 _ = Task.Run(() => HandleServer());
                 _ = Task.Run(() => SendData());
@@ -102,8 +106,6 @@ namespace ShadyMP
 
         public async Task HandleServer()
         {
-            using StreamReader reader = new(stream, Encoding.UTF8);
-
             try
             {
                 while (me.Connected)
@@ -152,7 +154,6 @@ namespace ShadyMP
 
         public async Task SendData()
         {
-            using StreamWriter writer = new(stream, Encoding.UTF8);
             while (me.Connected)
             {
                 if (Game.player == null)
@@ -171,6 +172,8 @@ namespace ShadyMP
 
         public void Disconnect()
         {
+            reader?.Dispose();
+            writer?.Dispose();
             me.Dispose();
             me = null;
             stream = null;

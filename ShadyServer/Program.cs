@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -16,11 +17,36 @@ namespace ShadyServer
         public static bool isRunning;
 
         public static ConcurrentDictionary<TcpClient, UserData> users = new();
-
-        public static void Main()
+        public static Dictionary<string, object> config = new Dictionary<string, object>
         {
+            { "address", IPAddress.Loopback },
+            { "port", 8080 },
+        };
+
+        public static void Main(string[] args)
+        {
+            ParseConfig(args);
             CommandHandler.RegisterCommands();
             StartServer();
+        }
+
+        public static void ParseConfig(string[] args)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i].StartsWith("--"))
+                {
+                    string name = args[i][2..];
+                    if (config.TryGetValue(name, out object originalValue) && i + 1 < args.Length)
+                    {
+                        Type type = originalValue.GetType();
+                        if (Util.TryParseString(type, args[i + 1], out object value))
+                        {
+                            config[name] = value ?? originalValue;
+                        }
+                    }
+                }
+            }
         }
 
         public static void StartServer()
@@ -28,10 +54,10 @@ namespace ShadyServer
             try
             {
                 Console.Clear();
-                IPAddress ip = IPAddress.Loopback;
-                int port = 8080;
+                IPAddress ip = (IPAddress)config["address"];
+                int port = (int)config["port"];
 
-                Console.WriteLine($"server hosted on {ip}:{port}");
+                Logger.LogInfo($"server hosted on {ip}:{port}");
 
                 server = new TcpListener(IPAddress.Loopback, port);
                 server.Start();
@@ -52,7 +78,7 @@ namespace ShadyServer
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                Logger.LogError(ex.ToString());
             }
         }
 
@@ -68,7 +94,7 @@ namespace ShadyServer
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogInfo($"Error accepting client: {ex.Message}");
+                    Logger.LogError($"Error accepting client: {ex.Message}");
                 }
             }
         }
@@ -102,11 +128,11 @@ namespace ShadyServer
             }
             catch (Exception ex)
             {
-                Logger.LogInfo($"Error handling client {client.Client.RemoteEndPoint}: {ex.Message}");
+                Logger.LogError($"Error handling client {client.Client.RemoteEndPoint}: {ex.Message}");
             }
             finally
             {
-                Console.WriteLine($"Client Disconnected: {client.Client.RemoteEndPoint}");
+                Logger.LogInfo($"Client Disconnected: {client.Client.RemoteEndPoint}");
                 _ = users.TryRemove(client, out _);
                 client.Dispose();
             }
@@ -120,7 +146,6 @@ namespace ShadyServer
                 foreach (TcpClient client in users.Keys)
                 {
                     UserData clientData = users[client];
-                    StringBuilder sb = new();
 
                     foreach (TcpClient dataClient in users.Keys)
                     {

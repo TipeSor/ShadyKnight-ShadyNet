@@ -25,7 +25,7 @@ namespace ShadyServer
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error executing command '{name}': {ex.Message}");
+                    Logger.LogError($"Error executing command '{name}': {ex.Message}");
                 }
             }
 
@@ -91,7 +91,7 @@ namespace ShadyServer
                     }
                     catch (Exception ex)
                     {
-                        Logger.LogInfo($"Cannot create command: {method_.Name} - {ex.Message}");
+                        Logger.LogError($"Cannot create command: {method_.Name} - {ex.Message}");
                     }
                 }
             }
