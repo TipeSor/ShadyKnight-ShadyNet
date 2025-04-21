@@ -1,77 +1,51 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace ShadyServer
 {
     public static class Program
     {
-        public static TcpListener server;
-        public static bool isRunning;
-
-        public static ConcurrentDictionary<TcpClient, UserData> users = new();
-        public static Dictionary<string, object> config = new Dictionary<string, object>
-        {
-            { "address", IPAddress.Loopback },
-            { "port", 8080 },
-        };
+        public static TcpListener Server { get; set; }
+        public static bool IsRunning { get; set; }
+        public static ConcurrentDictionary<TcpClient, UserData> Users { get; set; } = new();
 
         public static void Main(string[] args)
         {
-            ParseConfig(args);
+            Config.ParseConfig(args);
             CommandHandler.RegisterCommands();
             StartServer();
         }
 
-        public static void ParseConfig(string[] args)
-        {
-            for (int i = 0; i < args.Length; i++)
-            {
-                if (args[i].StartsWith("--"))
-                {
-                    string name = args[i][2..];
-                    if (config.TryGetValue(name, out object originalValue) && i + 1 < args.Length)
-                    {
-                        Type type = originalValue.GetType();
-                        if (Util.TryParseString(type, args[i + 1], out object value))
-                        {
-                            config[name] = value ?? originalValue;
-                        }
-                    }
-                }
-            }
-        }
 
         public static void StartServer()
         {
             try
             {
                 Console.Clear();
-                IPAddress ip = (IPAddress)config["address"];
-                int port = (int)config["port"];
+                IPAddress ip = Config.Address;
+                int port = Config.Port;
 
                 Logger.LogInfo($"server hosted on {ip}:{port}");
 
-                server = new TcpListener(IPAddress.Loopback, port);
-                server.Start();
-                isRunning = true;
+                Server = new TcpListener(ip, port);
+                Server.Start();
+                IsRunning = true;
 
                 _ = Task.Run(static () => ListenForClients());
                 _ = Task.Run(static () => SendData());
 
-                while (isRunning)
+                while (IsRunning)
                 {
                     if (Console.ReadKey().KeyChar == 'q')
                     {
-                        server.Stop();
-                        isRunning = false;
+                        Server.Stop();
+                        IsRunning = false;
                         Logger.LogInfo("Server stopped.");
                     }
                 }
@@ -84,11 +58,11 @@ namespace ShadyServer
 
         public static async Task ListenForClients()
         {
-            while (isRunning)
+            while (IsRunning)
             {
                 try
                 {
-                    TcpClient client = await server.AcceptTcpClientAsync();
+                    TcpClient client = await Server.AcceptTcpClientAsync();
                     Logger.LogInfo($"Client connected: {client.Client.RemoteEndPoint}");
                     _ = Task.Run(() => HandleClient(client));
                 }
@@ -108,7 +82,12 @@ namespace ShadyServer
                 StreamReader reader = new(networkStream, Encoding.UTF8);
                 StreamWriter writer = new(networkStream, Encoding.UTF8) { AutoFlush = true };
 
-                users[client] = new("name") { writer = writer };
+                foreach ((TcpClient userClient, UserData userData) in Users)
+                {
+                    await writer.WriteLineAsync($"init {userData.GetGuid()} {userData.Scene}");
+                }
+
+                Users[client] = new("name") { Writer = writer };
 
                 while (client.Connected)
                 {
@@ -133,7 +112,7 @@ namespace ShadyServer
             finally
             {
                 Logger.LogInfo($"Client Disconnected: {client.Client.RemoteEndPoint}");
-                _ = users.TryRemove(client, out _);
+                _ = Users.TryRemove(client, out _);
                 client.Dispose();
             }
         }
@@ -141,28 +120,29 @@ namespace ShadyServer
 
         public static async Task SendData()
         {
-            while (isRunning)
+            while (IsRunning)
             {
-                foreach (TcpClient client in users.Keys)
+                foreach ((TcpClient client, UserData data) in Users)
                 {
-                    UserData clientData = users[client];
-
-                    foreach (TcpClient dataClient in users.Keys)
+                    foreach ((TcpClient userClient, UserData userData) in Users)
                     {
-                        if (dataClient == client)
+                        if (userClient == client)
                         {
                             continue;
                         }
 
-                        Vector3 pos = users[dataClient].position;
-
-                        if (pos == users[dataClient].lastPosition)
+                        if (userData.Position == userData.LastPosition)
                         {
                             continue;
                         }
 
-                        await users[client].writer.WriteLineAsync($"update-data {users[dataClient].guid} {pos.x:F2} {pos.y:F2} {pos.z:F2} {users[dataClient].scene}");
-                        users[dataClient].lastPosition = pos;
+                        if (data.Scene != userData.Scene)
+                        {
+                            continue;
+                        }
+
+                        await Users[client].Writer.WriteLineAsync($"update-data {userData}");
+                        userData.LastPosition = userData.Position;
                     }
 
                 }
@@ -170,17 +150,35 @@ namespace ShadyServer
             }
         }
 
+#pragma warning disable IDE1006
         [Command]
         public static void setname(TcpClient client, string name)
         {
-            users[client].name = name;
+            Users[client].Name = name;
         }
 
         [Command]
-        public static void setposition(TcpClient client, float x, float y, float z, string scene)
+        public static void setposition(TcpClient client, float x, float y, float z)
         {
-            users[client].SetPosition(new(x, y, z));
-            users[client].scene = scene;
+            Users[client].SetPosition(new(x, y, z));
+        }
+
+        [Command]
+        public static void setScene(TcpClient client, string scene)
+        {
+            Users[client].Scene = scene;
+
+            Guid guid = Users[client].GetGuid();
+
+            foreach ((TcpClient user, UserData data) in Users)
+            {
+                if (client == user || data.Writer == null)
+                {
+                    continue;
+                }
+
+                data.Writer.WriteLine($"clientscene {guid} {scene}");
+            }
         }
     }
 }

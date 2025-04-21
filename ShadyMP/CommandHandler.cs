@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Net.Sockets;
 using System.Reflection;
 
-namespace ShadyServer
+namespace ShadyMP
 {
     internal static class CommandHandler
     {
@@ -17,43 +14,37 @@ namespace ShadyServer
             internal MethodInfo method = method;
             internal ParameterInfo[] parameters = method.GetParameters();
 
-            public void Invoke(string[] args, TcpClient client)
+            public void Invoke(string[] args)
             {
                 try
                 {
-                    object[] convertedArgs = ConvertArgs(args, client);
+                    object[] convertedArgs = ConvertArgs(args);
                     _ = method.Invoke(null, convertedArgs);
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError($"Error executing command '{name}': {ex.Message}");
+                    Plugin.Logger.LogError($"Error executing command '{name}': {ex.Message}");
                 }
             }
 
-            private object[] ConvertArgs(string[] args, TcpClient client)
+            private object[] ConvertArgs(string[] args)
             {
                 object[] convertedArgs = new object[parameters.Length];
-                int argIndex = 0;
+                if (parameters.Length != args.Length)
+                {
+                    throw new ArgumentException($"Incorrect amount of arguments: {name}");
+                }
 
                 for (int i = 0; i < parameters.Length; i++)
                 {
                     Type type = parameters[i].ParameterType;
-                    if (type == typeof(TcpClient))
-                    {
-                        convertedArgs[i] = client;
-                    }
-                    else
-                    {
-                        if (argIndex >= args.Length)
-                        {
-                            throw new ArgumentException($"Missing argument for parameter '{parameters[i].Name}' ({GetCleanTypeName(type)}).");
-                        }
 
-                        convertedArgs[i] = type == typeof(bool) ? bool.Parse(args[argIndex]) :
-                                       type.IsEnum ? Enum.Parse(type, args[argIndex], true) :
-                                       Convert.ChangeType(args[argIndex], type, new CultureInfo("en-US"));
-                        argIndex++;
+                    if (!Util.TryParseString(type, args[i], out object value))
+                    {
+                        throw new Exception($"Argment `{i}` (`{args[i]}`) is not type `{type}`.");
                     }
+
+                    convertedArgs[i] = value;
                 }
 
                 return convertedArgs;
@@ -86,33 +77,26 @@ namespace ShadyServer
                         string name = $"{method_.Name.ToLowerInvariant()}";
 
                         Commands[name] = new(name, method_);
-                        Logger.LogInfo($"Created command: '{name}'");
                     }
                     catch (Exception ex)
                     {
-                        Logger.LogError($"Cannot create command: {method_.Name} - {ex}");
+                        Plugin.Logger.LogError($"Cannot create command: {method_.Name} - {ex}");
                     }
                 }
             }
         }
 
-        internal static void ExecuteCommand(string commandName, string[] args, TcpClient client)
+        internal static void ExecuteCommand(string commandName, string[] args)
         {
             if (!TryGetCommand(commandName, out CommandEntry command))
             {
-                Logger.LogInfo($"Command '{commandName}' not found.");
+                Plugin.Logger.LogWarning($"Command '{commandName}' not found.");
                 return;
             }
 
-            command.Invoke(args, client);
+            command.Invoke(args);
         }
 
-        private static string GetCleanTypeName(Type type)
-        {
-            return type.IsGenericType
-                ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(GetCleanTypeName))}>"
-                : type.Name;
-        }
     }
 
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
