@@ -1,10 +1,7 @@
 using System;
-using System.IO;
-using System.Linq;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading.Tasks;
-using UnityEngine;
+using ShadyShared;
 using UnityEngine.SceneManagement;
 
 namespace ShadyMP
@@ -16,8 +13,8 @@ namespace ShadyMP
 
         private TcpClient me;
         private NetworkStream stream;
-        private StreamReader reader;
-        private StreamWriter writer;
+
+        private UserState self;
 
         internal NetworkManager()
         {
@@ -32,8 +29,7 @@ namespace ShadyMP
                 await me.ConnectAsync(address, port);
 
                 stream = me.GetStream();
-                reader = new StreamReader(stream, Encoding.UTF8);
-                writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+                self = new UserState(Game.player.t.position, SceneManager.GetActiveScene().name);
 
                 _ = Task.Run(ServerLoop);
                 _ = Task.Run(ClientLoop);
@@ -50,16 +46,8 @@ namespace ShadyMP
             {
                 while (me.Connected)
                 {
-                    string data = await reader.ReadLineAsync();
-                    if (string.IsNullOrEmpty(data))
-                    {
-                        break;
-                    }
-                    string[] splitData = data.Split(' ');
-                    string command = splitData[0];
-                    string[] args = [.. splitData.Skip(1)];
-
-                    CommandHandler.ExecuteCommand(command, args);
+                    byte[] data = await Protocol.ReadPacketAsync(stream);
+                    ProtocolHandler.HandlePacket(data, new());
                 }
             }
             catch (Exception ex)
@@ -82,27 +70,36 @@ namespace ShadyMP
                     continue;
                 }
 
-                Vector3 pos = Game.player.t.position;
-                string scene = SceneManager.GetActiveScene().name;
-                string message = $"setposition {pos.x} {pos.y} {pos.z} {scene}";
+                self.Position = Game.player.t.position;
+                self.SceneName = SceneManager.GetActiveScene().name;
 
-                await writer.WriteLineAsync(message);
-                await writer.FlushAsync();
+                byte[] data = self.Serialize();
+                byte[] packet = Protocol.BuildPacket(ProtocolID.Server_UpdateState, data);
+                await Protocol.WritePacketAsync(stream, packet);
+
                 await Task.Delay(30);
             }
         }
 
         internal void Disconnect()
         {
-            reader?.Dispose();
-            writer?.Dispose();
             stream?.Dispose();
             me?.Dispose();
 
-            reader = null;
-            writer = null;
             stream = null;
             me = null;
+        }
+
+        [Protocol(ProtocolID.Client_UpdateState)]
+        public static void Client_UpdateState(byte[] data, HandlerContext _)
+        {
+            Guid guid = BitGood.ToGuid(data, 0);
+            if (!UserManager.Instance.TryGetUser(guid, out UserData userData))
+            {
+                return;
+            }
+
+            userData.state.Deserialize(data, 16);
         }
     }
 }

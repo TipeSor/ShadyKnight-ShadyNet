@@ -1,6 +1,5 @@
 using System;
-
-namespace ShadyServer
+namespace ShadyShared
 {
     public static class Logger
     {

@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading.Tasks;
+using ShadyShared;
 
 namespace ShadyServer
 {
@@ -18,7 +16,6 @@ namespace ShadyServer
         public static void Main(string[] args)
         {
             Config.ParseConfig(args);
-            CommandHandler.RegisterCommands();
             StartServer();
         }
 
@@ -77,31 +74,14 @@ namespace ShadyServer
         {
             try
             {
-                NetworkStream networkStream = client.GetStream();
+                NetworkStream stream = client.GetStream();
 
-                StreamReader reader = new(networkStream, Encoding.UTF8);
-                StreamWriter writer = new(networkStream, Encoding.UTF8) { AutoFlush = true };
-
-                foreach ((TcpClient userClient, UserData userData) in Users)
-                {
-                    await writer.WriteLineAsync($"init {userData.GetGuid()} {userData.Scene}");
-                }
-
-                Users[client] = new("name") { Writer = writer };
+                Users[client] = new() { Stream = stream };
 
                 while (client.Connected)
                 {
-                    string data = await reader.ReadLineAsync();
-                    if (data == null)
-                    {
-                        break;
-                    }
-
-                    string[] parsedData = Util.ParseInput(data);
-                    string commandName = parsedData[0];
-                    string[] args = [.. parsedData.Skip(1)];
-
-                    CommandHandler.ExecuteCommand(commandName, args, client);
+                    byte[] data = await Protocol.ReadPacketAsync(stream);
+                    ProtocolHandler.HandlePacket(data, new([client]));
                 }
 
             }
@@ -122,7 +102,7 @@ namespace ShadyServer
         {
             while (IsRunning)
             {
-                foreach ((TcpClient client, UserData data) in Users)
+                foreach ((TcpClient client, UserData clientData) in Users)
                 {
                     foreach ((TcpClient userClient, UserData userData) in Users)
                     {
@@ -131,53 +111,16 @@ namespace ShadyServer
                             continue;
                         }
 
-                        if (userData.Position == userData.LastPosition)
-                        {
-                            continue;
-                        }
+                        byte[] guidBytes = BitGood.GetBytes(userData.guid);
+                        byte[] stateBytes = userData.state.Serialize();
+                        byte[] data = Utils.Combine(guidBytes, stateBytes);
 
-                        if (data.Scene != userData.Scene)
-                        {
-                            continue;
-                        }
-
-                        await Users[client].Writer.WriteLineAsync($"update-data {userData}");
-                        userData.LastPosition = userData.Position;
+                        byte[] packet = Protocol.BuildPacket(ProtocolID.Client_UpdateState, data);
+                        await Protocol.WritePacketAsync(clientData.Stream, packet);
                     }
 
                 }
-                await Task.Delay(30);
-            }
-        }
-
-#pragma warning disable IDE1006
-        [Command]
-        public static void setname(TcpClient client, string name)
-        {
-            Users[client].Name = name;
-        }
-
-        [Command]
-        public static void setposition(TcpClient client, float x, float y, float z)
-        {
-            Users[client].SetPosition(new(x, y, z));
-        }
-
-        [Command]
-        public static void setScene(TcpClient client, string scene)
-        {
-            Users[client].Scene = scene;
-
-            Guid guid = Users[client].GetGuid();
-
-            foreach ((TcpClient user, UserData data) in Users)
-            {
-                if (client == user || data.Writer == null)
-                {
-                    continue;
-                }
-
-                data.Writer.WriteLine($"clientscene {guid} {scene}");
+                await Task.Delay(100);
             }
         }
     }

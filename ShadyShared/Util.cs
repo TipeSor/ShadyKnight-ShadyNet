@@ -3,11 +3,31 @@ using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace ShadyMP
+namespace ShadyShared
 {
-    public static partial class Util
+    public static class Utils
     {
-        public static bool TryParseString(Type type, string input, out object value)
+        public static byte[] Combine(params byte[][] arrays)
+        {
+            int totalLength = 0;
+            foreach (byte[] arr in arrays)
+            {
+                totalLength += arr.Length;
+            }
+
+            byte[] result = new byte[totalLength];
+            int offset = 0;
+
+            foreach (byte[] arr in arrays)
+            {
+                Buffer.BlockCopy(arr, 0, result, offset, arr.Length);
+                offset += arr.Length;
+            }
+
+            return result;
+        }
+
+        public static bool TryParseString(Type type, string input, out object? value)
         {
             try
             {
@@ -17,9 +37,9 @@ namespace ShadyMP
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"Error parsing: {ex}");
+                Logger.LogError($"Error parsing: {ex}");
             }
-            value = default!;
+            value = default;
             return false;
         }
 

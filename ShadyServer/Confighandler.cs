@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using ShadyShared;
 
 namespace ShadyServer
 {
@@ -31,7 +32,7 @@ namespace ShadyServer
                 }
 
                 Type type = originalValue.GetType();
-                if (!Util.TryParseString(type, args[i + 1], out object value))
+                if (!Utils.TryParseString(type, args[i + 1], out object value))
                 {
                     continue;
                 }

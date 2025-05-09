@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using BepInEx;
 using BepInEx.Logging;
+using ShadyShared;
 using UnityEngine;
 
 #pragma warning disable IDE0051
@@ -22,16 +23,11 @@ namespace ShadyMP
         {
             Logger = base.Logger;
             Logger.LogInfo($"Plugin {PluginInfo.GUID} is loaded!");
-            CommandHandler.RegisterCommands();
+            ProtocolHandler.RegisterHandlers();
         }
 
         internal void OnGUI()
         {
-            if (Game.debug && Game.player != null)
-            {
-                GUILayout.Label($"Position: {Game.player.t.position}");
-            }
-
             GUILayoutOption option = GUILayout.Width(120f);
 
             if (!NetworkManager.Instance.IsConnected)
@@ -44,6 +40,11 @@ namespace ShadyMP
                 {
                     NetworkManager.Instance.Disconnect();
                 }
+            }
+
+            if (Game.debug && Game.player != null)
+            {
+                GUILayout.Label($"Position: {Game.player.t.position}");
             }
         }
 

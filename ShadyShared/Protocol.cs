@@ -1,0 +1,73 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+
+namespace ShadyShared
+{
+    public class Protocol
+    {
+        public static byte[] BuildPacket(ProtocolID command, byte[] data)
+        {
+            byte[] cmd = BitGood.GetBytes((uint)command);
+            int len = cmd.Length + data.Length;
+            byte[] lenBytes = BitGood.GetBytes(len);
+            byte[] payload = Utils.Combine(lenBytes, cmd, data);
+            return payload;
+        }
+
+        public static async Task WritePacketAsync(Stream stream, byte[] data)
+        {
+            await stream.WriteAsync(data, 0, data.Length);
+        }
+
+        public static (ProtocolID, byte[]) ParsePacket(byte[] payload)
+        {
+            uint protocolNumber = BitGood.ToUInt(payload, 0);
+            if (!Enum.IsDefined(typeof(ProtocolID), protocolNumber))
+            {
+                throw new KeyNotFoundException($"key `{protocolNumber}` not found in `ProtocolID`");
+            }
+            ProtocolID command = (ProtocolID)protocolNumber;
+            byte[] data = BitGood.ExtractBytes(payload, 4, payload.Length - 4);
+            return (command, data);
+        }
+
+        public static async Task<byte[]> ReadPacketAsync(Stream stream)
+        {
+            byte[] lengthBytes = new byte[4];
+            await ReadExactAsync(stream, lengthBytes, 0, 4);
+
+            int length = BitGood.ToInt(lengthBytes, 0);
+            byte[] data = new byte[length];
+            await ReadExactAsync(stream, data, 0, length);
+
+            return data;
+        }
+
+        public static async Task ReadExactAsync(Stream stream, byte[] buffer, int offset, int count)
+        {
+            int totalRead = 0;
+            while (totalRead < count)
+            {
+                int bytesRead = await stream.ReadAsync(buffer, totalRead + offset, count - totalRead);
+                if (bytesRead == 0)
+                {
+                    throw new EndOfStreamException("stream ended before all bytes were read");
+                }
+                totalRead += bytesRead;
+            }
+        }
+    }
+
+#pragma warning disable IDE0055
+    public enum ProtocolID : uint
+    {
+        Client_InitUser                 = 0x00000000,
+        Client_UpdateState              = 0x00000001,
+
+        Server_VersionCheck             = 0x80000000,
+        Server_UpdateState              = 0x80000001,
+    }
+#pragma warning restore IDE0055
+}

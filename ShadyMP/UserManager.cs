@@ -19,7 +19,22 @@ namespace ShadyMP
 
             UserObject.name = $"User_{guid.ToString().Substring(0, 8)}";
 
-            users[guid] = new UserData(guid) { UserObject = UserObject };
+            users[guid] = new UserData(guid) { userObject = UserObject };
+        }
+
+        internal bool TryGetUser(Guid guid, out UserData data)
+        {
+            return users.TryGetValue(guid, out data);
+        }
+
+        internal void RemoveUser(Guid guid)
+        {
+            if (!users.TryRemove(guid, out UserData data))
+            {
+                return;
+            }
+
+            UnityEngine.Object.Destroy(data.userObject);
         }
 
         internal void UpdateUsers()
@@ -34,8 +49,8 @@ namespace ShadyMP
         {
             UserData userData = users[guid];
 
-            GameObject userObject = userData.UserObject;
-            bool isInSameScene = userData.Scene == SceneManager.GetActiveScene().name;
+            GameObject userObject = userData.userObject;
+            bool isInSameScene = userData.state.SceneName == SceneManager.GetActiveScene().name;
 
             if (userObject.activeSelf != isInSameScene)
             {
@@ -47,39 +62,13 @@ namespace ShadyMP
                 return;
             }
 
-            Vector3 old = userData.OldPosition;
-            Vector3 next = userData.Position;
-            float t = Mathf.Clamp01(userData.TimeSinceData / 0.03f);
+            Vector3 old = userData.state.OldPosition;
+            Vector3 next = userData.state.Position;
+            float t = Mathf.Clamp01(userData.TimeSinceData / 0.01f);
 
             userObject.transform.position = Vector3.Lerp(old, next, t);
 
             userData.TimeSinceData += Time.fixedUnscaledDeltaTime;
-        }
-
-        internal void RemoveUser(Guid guid)
-        {
-            if (!users.TryRemove(guid, out UserData data))
-            {
-                return;
-            }
-
-            UnityEngine.Object.Destroy(data.UserObject);
-        }
-
-        internal void UpdateUserData(Guid guid, Vector3 position)
-        {
-            if (!users.ContainsKey(guid))
-            {
-                NewUser(guid);
-            }
-
-            users[guid].SetPosition(position);
-            users[guid].TimeSinceData = 0f;
-        }
-
-        internal void UpdateUserScene(Guid guid, string scene)
-        {
-            users[guid].Scene = scene;
         }
     }
 }

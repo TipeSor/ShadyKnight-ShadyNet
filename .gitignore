@@ -1,8 +1,11 @@
-ShadyServer/bin/
-ShadyServer/obj/
-
 ShadyMP/bin/
 ShadyMP/obj/
 ShadyMP/build.sh
+
+ShadyServer/bin/
+ShadyServer/obj/
+
+ShadyShared/bin/
+ShadyShared/obj/
 
 TestClient/
