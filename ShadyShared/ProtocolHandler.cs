@@ -28,7 +28,7 @@ namespace ShadyShared
                     parameters[1].ParameterType != typeof(HandlerContext) ||
                     method.ReturnType != typeof(void))
                 {
-                    Console.WriteLine($"invalid signature for method `{method.DeclaringType.FullName}.{method.Name}` it should be `void(byte[])`");
+                    Console.WriteLine($"invalid signature for method `{method.DeclaringType.FullName}.{method.Name}` it should be `void(byte[], HandlerContext)`");
                     continue;
                 }
                 ProtocolHandlers[protocolAttribute.ProtocolId] = (HandlerDelegate)method.CreateDelegate(typeof(HandlerDelegate));

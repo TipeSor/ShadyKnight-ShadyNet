@@ -53,7 +53,7 @@ namespace ShadyShared
                 int bytesRead = await stream.ReadAsync(buffer, totalRead + offset, count - totalRead);
                 if (bytesRead == 0)
                 {
-                    throw new EndOfStreamException("stream ended before all bytes were read");
+                    throw new EndOfStreamException($"stream ended before all bytes were read. expected: `{count}`. got: `{totalRead}`");
                 }
                 totalRead += bytesRead;
             }
@@ -65,9 +65,11 @@ namespace ShadyShared
     {
         Client_InitUser                 = 0x00000000,
         Client_UpdateState              = 0x00000001,
+        Client_Test                     = 0x00000002,
 
         Server_VersionCheck             = 0x80000000,
         Server_UpdateState              = 0x80000001,
+        Server_Test                     = 0x80000002,
     }
 #pragma warning restore IDE0055
 }

@@ -17,7 +17,7 @@ namespace ShadyMP
         private string address = "";
         private string port = "";
 
-        private readonly ConcurrentQueue<Action> MainThreadQueue = new();
+        internal static readonly ConcurrentQueue<Action> MainThreadQueue = new();
 
         private void Awake()
         {
@@ -28,23 +28,30 @@ namespace ShadyMP
 
         internal void OnGUI()
         {
-            GUILayoutOption option = GUILayout.Width(120f);
+            try
+            {
+                GUILayoutOption option = GUILayout.Width(120f);
 
-            if (!NetworkManager.Instance.IsConnected)
-            {
-                DrawConnectionUI(option);
-            }
-            else
-            {
-                if (GUILayout.Button("Leave"))
+                if (!NetworkManager.Instance.IsConnected)
                 {
-                    NetworkManager.Instance.Disconnect();
+                    DrawConnectionUI(option);
+                }
+                else
+                {
+                    if (GUILayout.Button("Leave"))
+                    {
+                        NetworkManager.Instance.Disconnect();
+                    }
+                }
+
+                if (Game.debug && Game.player != null)
+                {
+                    GUILayout.Label($"Position: {Game.player.t.position}");
                 }
             }
-
-            if (Game.debug && Game.player != null)
+            catch (Exception ex)
             {
-                GUILayout.Label($"Position: {Game.player.t.position}");
+                Console.WriteLine(ex.ToString());
             }
         }
 
@@ -68,12 +75,19 @@ namespace ShadyMP
 
         private void FixedUpdate()
         {
-            while (MainThreadQueue.TryDequeue(out Action action))
+            try
             {
-                action();
-            }
+                while (MainThreadQueue.TryDequeue(out Action action))
+                {
+                    action();
+                }
 
-            UserManager.Instance.UpdateUsers();
+                UserManager.Instance.UpdateUsers();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
         }
     }
 }

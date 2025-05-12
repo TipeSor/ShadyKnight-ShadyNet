@@ -66,5 +66,14 @@ namespace ShadyShared
 
             return type.Name;
         }
+
+        public static void WriteBytes(byte[] bytes)
+        {
+            string hex = BitConverter.ToString(bytes);
+            Console.BackgroundColor = ConsoleColor.DarkMagenta;
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine(hex);
+            Console.ResetColor();
+        }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -16,6 +17,7 @@ namespace ShadyServer
         public static void Main(string[] args)
         {
             Config.ParseConfig(args);
+            ProtocolHandler.RegisterHandlers();
             StartServer();
         }
 
@@ -80,6 +82,11 @@ namespace ShadyServer
 
                 while (client.Connected)
                 {
+                    if (!stream.DataAvailable)
+                    {
+                        continue;
+                    }
+
                     byte[] data = await Protocol.ReadPacketAsync(stream);
                     ProtocolHandler.HandlePacket(data, new([client]));
                 }
@@ -88,6 +95,7 @@ namespace ShadyServer
             catch (Exception ex)
             {
                 Logger.LogError($"Error handling client {client.Client.RemoteEndPoint}: {ex.Message}");
+                Logger.LogError($"{ex.StackTrace}");
             }
             finally
             {
@@ -121,6 +129,29 @@ namespace ShadyServer
 
                 }
                 await Task.Delay(100);
+            }
+        }
+
+        [Protocol(ProtocolID.Server_UpdateState)]
+        public static void Server_UpdateState(byte[] data, HandlerContext context)
+        {
+            TcpClient client = (TcpClient)context.objects.FirstOrDefault();
+            Users[client].state.Deserialize(data, 0);
+        }
+
+        [Protocol(ProtocolID.Server_Test)]
+        public static void Server_Test(byte[] data, HandlerContext context)
+        {
+            TcpClient client = (TcpClient)context.objects.FirstOrDefault();
+            foreach ((TcpClient user, UserData userData) in Users)
+            {
+                if (client == user)
+                {
+                    continue;
+                }
+
+                byte[] packet = Protocol.BuildPacket(ProtocolID.Client_Test, data);
+                _ = Protocol.WritePacketAsync(userData.Stream, packet);
             }
         }
     }

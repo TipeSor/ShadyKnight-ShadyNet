@@ -13,13 +13,16 @@ namespace ShadyMP
 
         internal void NewUser(Guid guid)
         {
-            GameObject UserObject = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            UnityEngine.Object.Destroy(UserObject.GetComponent<Collider>());
-            UnityEngine.Object.DontDestroyOnLoad(UserObject);
+            Plugin.MainThreadQueue.Enqueue(() =>
+            {
+                GameObject UserObject = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                UnityEngine.Object.Destroy(UserObject.GetComponent<Collider>());
+                UnityEngine.Object.DontDestroyOnLoad(UserObject);
 
-            UserObject.name = $"User_{guid.ToString().Substring(0, 8)}";
+                UserObject.name = $"User_{guid.ToString().Substring(0, 8)}";
 
-            users[guid] = new UserData(guid) { userObject = UserObject };
+                users[guid] = new UserData(guid) { userObject = UserObject };
+            });
         }
 
         internal bool TryGetUser(Guid guid, out UserData data)
@@ -34,7 +37,7 @@ namespace ShadyMP
                 return;
             }
 
-            UnityEngine.Object.Destroy(data.userObject);
+            Plugin.MainThreadQueue.Enqueue(() => UnityEngine.Object.Destroy(data.userObject));
         }
 
         internal void UpdateUsers()

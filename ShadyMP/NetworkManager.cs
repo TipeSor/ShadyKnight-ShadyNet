@@ -37,6 +37,7 @@ namespace ShadyMP
             catch (Exception ex)
             {
                 Game.message.Show(ex.ToString());
+                Logger.LogError(ex.ToString());
             }
         }
 
@@ -46,7 +47,13 @@ namespace ShadyMP
             {
                 while (me.Connected)
                 {
+                    if (!stream.DataAvailable)
+                    {
+                        continue;
+                    }
+
                     byte[] data = await Protocol.ReadPacketAsync(stream);
+                    Utils.WriteBytes(data);
                     ProtocolHandler.HandlePacket(data, new());
                 }
             }
@@ -62,6 +69,12 @@ namespace ShadyMP
 
         internal async Task ClientLoop()
         {
+            byte[] a = BitGood.GetBytes(123456789);
+            byte[] b = Protocol.BuildPacket(ProtocolID.Server_Test, a);
+            await Protocol.WritePacketAsync(stream, b);
+
+            Utils.WriteBytes(b);
+
             while (me.Connected)
             {
                 if (Game.player == null)
@@ -93,13 +106,23 @@ namespace ShadyMP
         [Protocol(ProtocolID.Client_UpdateState)]
         public static void Client_UpdateState(byte[] data, HandlerContext _)
         {
+            string hex = BitConverter.ToString(data);
+            Logger.LogWarning(hex);
+
             Guid guid = BitGood.ToGuid(data, 0);
             if (!UserManager.Instance.TryGetUser(guid, out UserData userData))
             {
-                return;
+                UserManager.Instance.NewUser(guid);
             }
 
             userData.state.Deserialize(data, 16);
+        }
+
+        [Protocol(ProtocolID.Client_Test)]
+        public static void Client_Test(byte[] data, HandlerContext _)
+        {
+            string hex = BitConverter.ToString(data);
+            Logger.LogWarning(hex);
         }
     }
 }
