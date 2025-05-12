@@ -16,10 +16,7 @@ namespace ShadyMP
 
         private UserState self;
 
-        internal NetworkManager()
-        {
-
-        }
+        internal NetworkManager() { }
 
         internal async Task ConnectAsync(string address, int port)
         {
@@ -53,7 +50,6 @@ namespace ShadyMP
                     }
 
                     byte[] data = await Protocol.ReadPacketAsync(stream);
-                    Utils.WriteBytes(data);
                     ProtocolHandler.HandlePacket(data, new());
                 }
             }
@@ -69,12 +65,6 @@ namespace ShadyMP
 
         internal async Task ClientLoop()
         {
-            byte[] a = BitGood.GetBytes(123456789);
-            byte[] b = Protocol.BuildPacket(ProtocolID.Server_Test, a);
-            await Protocol.WritePacketAsync(stream, b);
-
-            Utils.WriteBytes(b);
-
             while (me.Connected)
             {
                 if (Game.player == null)
@@ -86,8 +76,12 @@ namespace ShadyMP
                 self.Position = Game.player.t.position;
                 self.SceneName = SceneManager.GetActiveScene().name;
 
+
                 byte[] data = self.Serialize();
                 byte[] packet = Protocol.BuildPacket(ProtocolID.Server_UpdateState, data);
+
+                Logger.LogInfo($"SENT: {BitConverter.ToString(packet)}");
+
                 await Protocol.WritePacketAsync(stream, packet);
 
                 await Task.Delay(30);
@@ -106,15 +100,15 @@ namespace ShadyMP
         [Protocol(ProtocolID.Client_UpdateState)]
         public static void Client_UpdateState(byte[] data, HandlerContext _)
         {
-            string hex = BitConverter.ToString(data);
-            Logger.LogWarning(hex);
-
             Guid guid = BitGood.ToGuid(data, 0);
             if (!UserManager.Instance.TryGetUser(guid, out UserData userData))
             {
+                Logger.LogInfo($"Failed to get user {guid}");
                 UserManager.Instance.NewUser(guid);
+                return;
             }
 
+            Logger.LogInfo($"GOT:  {BitConverter.ToString(data)}");
             userData.state.Deserialize(data, 16);
         }
 

@@ -67,7 +67,7 @@ namespace ShadyMP
 
             Vector3 old = userData.state.OldPosition;
             Vector3 next = userData.state.Position;
-            float t = Mathf.Clamp01(userData.TimeSinceData / 0.01f);
+            float t = Mathf.Clamp01(userData.TimeSinceData / 0.1f);
 
             userObject.transform.position = Vector3.Lerp(old, next, t);
 

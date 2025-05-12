@@ -9,7 +9,7 @@ namespace ShadyServer
     {
         private static readonly Dictionary<string, object> config = new()
         {
-            { "address", IPAddress.Any},
+            { "address", IPAddress.Loopback},
             { "port", (ushort)8080 }
         };
 

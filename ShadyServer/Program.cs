@@ -84,6 +84,7 @@ namespace ShadyServer
                 {
                     if (!stream.DataAvailable)
                     {
+                        await Task.Delay(30);
                         continue;
                     }
 
