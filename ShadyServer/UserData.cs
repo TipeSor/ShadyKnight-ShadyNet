@@ -6,8 +6,14 @@ namespace ShadyServer
 {
     public class UserData
     {
-        internal readonly UserState state = new();
-        internal readonly Guid guid = Guid.NewGuid();
+        internal readonly UserState State = new();
+        private byte[] _stateBytes;
+        internal byte[] StateBytes
+        {
+            get => _stateBytes ??= State.Serialize();
+            set => _stateBytes = value;
+        }
+        internal readonly Guid Guid = Guid.NewGuid();
         internal NetworkStream Stream { get; init; }
     }
 }

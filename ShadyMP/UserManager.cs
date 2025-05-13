@@ -32,12 +32,25 @@ namespace ShadyMP
 
         internal void RemoveUser(Guid guid)
         {
-            if (!users.TryRemove(guid, out UserData data))
+            UserData data;
+            while (!users.TryRemove(guid, out data))
             {
-                return;
+                continue;
             }
+            Plugin.Logger.LogInfo($"enqueuing {data.guid} object to be destroyed");
+            Plugin.MainThreadQueue.Enqueue(() =>
+            {
+                UnityEngine.Object.Destroy(data.userObject);
+                Plugin.Logger.LogInfo($"destrotyed {data.guid} object");
+            });
+        }
 
-            Plugin.MainThreadQueue.Enqueue(() => UnityEngine.Object.Destroy(data.userObject));
+        internal void RemoveUsers()
+        {
+            foreach (Guid guid in users.Keys)
+            {
+                RemoveUser(guid);
+            }
         }
 
         internal void UpdateUsers()

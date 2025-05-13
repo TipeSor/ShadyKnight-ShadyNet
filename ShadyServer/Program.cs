@@ -14,13 +14,14 @@ namespace ShadyServer
         public static bool IsRunning { get; set; }
         public static ConcurrentDictionary<TcpClient, UserData> Users { get; set; } = new();
 
+        public static readonly ConcurrentQueue<byte[]> broadcastQueue = [];
+
         public static void Main(string[] args)
         {
             Config.ParseConfig(args);
             ProtocolHandler.RegisterHandlers();
             StartServer();
         }
-
 
         public static void StartServer()
         {
@@ -82,27 +83,35 @@ namespace ShadyServer
 
                 while (client.Connected)
                 {
-                    if (!stream.DataAvailable)
-                    {
-                        await Task.Delay(30);
-                        continue;
-                    }
-
                     byte[] data = await Protocol.ReadPacketAsync(stream);
                     ProtocolHandler.HandlePacket(data, new([client]));
                 }
 
             }
+            catch (System.IO.EndOfStreamException ex)
+            {
+                if (Config.Verbose)
+                {
+                    Logger.LogError($"Error handling client {client.Client.RemoteEndPoint}: {ex.Message}");
+                    Logger.LogError($"{ex.StackTrace}");
+                }
+                else
+                {
+                    Logger.LogError($"EOS exception from {client.Client.RemoteEndPoint}");
+                }
+            }
             catch (Exception ex)
             {
-                Logger.LogError($"Error handling client {client.Client.RemoteEndPoint}: {ex.Message}");
+                Logger.LogError($"{ex.Message}");
                 Logger.LogError($"{ex.StackTrace}");
             }
             finally
             {
                 Logger.LogInfo($"Client Disconnected: {client.Client.RemoteEndPoint}");
-                _ = Users.TryRemove(client, out _);
-                client.Dispose();
+                if (Users.ContainsKey(client))
+                {
+                    DisconnectUser(client);
+                }
             }
         }
 
@@ -111,8 +120,19 @@ namespace ShadyServer
         {
             while (IsRunning)
             {
+                while (broadcastQueue.TryDequeue(out byte[] packet))
+                {
+                    await Broadcast(packet);
+                }
+
                 foreach ((TcpClient client, UserData clientData) in Users)
                 {
+                    byte[] guidBytes = BitGood.GetBytes(clientData.Guid);
+                    byte[] stateBytes = clientData.StateBytes;
+                    byte[] data = Utils.Combine(guidBytes, stateBytes);
+
+                    byte[] packet = Protocol.BuildPacket(ProtocolID.Client_UpdateState, data);
+
                     foreach ((TcpClient userClient, UserData userData) in Users)
                     {
                         if (userClient == client)
@@ -120,16 +140,33 @@ namespace ShadyServer
                             continue;
                         }
 
-                        byte[] guidBytes = BitGood.GetBytes(userData.guid);
-                        byte[] stateBytes = userData.state.Serialize();
-                        byte[] data = Utils.Combine(guidBytes, stateBytes);
-
-                        byte[] packet = Protocol.BuildPacket(ProtocolID.Client_UpdateState, data);
-                        await Protocol.WritePacketAsync(clientData.Stream, packet);
+                        await Protocol.WritePacketAsync(userData.Stream, packet);
                     }
-
                 }
                 await Task.Delay(100);
+            }
+        }
+
+        public static void DisconnectUser(TcpClient user)
+        {
+            UserData userData;
+            while (!Users.TryRemove(user, out userData))
+            {
+                continue;
+            }
+
+            byte[] data = BitGood.GetBytes(userData.Guid);
+            byte[] packet = Protocol.BuildPacket(ProtocolID.Client_RemoveUser, data);
+            broadcastQueue.Enqueue(packet);
+            user.Dispose();
+        }
+
+        public static async Task Broadcast(byte[] data)
+        {
+            Logger.LogInfo($"broadcasting {BitConverter.ToString(data)}");
+            foreach (UserData clientData in Users.Values)
+            {
+                await Protocol.WritePacketAsync(clientData.Stream, data);
             }
         }
 
@@ -137,7 +174,16 @@ namespace ShadyServer
         public static void Server_UpdateState(byte[] data, HandlerContext context)
         {
             TcpClient client = (TcpClient)context.objects.FirstOrDefault();
-            Users[client].state.Deserialize(data, 0);
+            Users[client].StateBytes = data;
+            Users[client].State.Deserialize(data, 0);
+        }
+
+        [Protocol(ProtocolID.Server_Disconnect)]
+        public static void Server_Disconnect(byte[] _, HandlerContext context)
+        {
+            TcpClient client = (TcpClient)context.objects.FirstOrDefault();
+            Logger.LogInfo($"user `{client.Client.RemoteEndPoint}`");
+            DisconnectUser(client);
         }
 
         [Protocol(ProtocolID.Server_Test)]

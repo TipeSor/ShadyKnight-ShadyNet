@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Logging;
 using ShadyShared;
@@ -16,6 +17,7 @@ namespace ShadyMP
 
         private string address = "";
         private string port = "";
+        private string username = "";
 
         internal static readonly ConcurrentQueue<Action> MainThreadQueue = new();
 
@@ -40,9 +42,12 @@ namespace ShadyMP
                 {
                     if (GUILayout.Button("Leave"))
                     {
-                        NetworkManager.Instance.Disconnect();
+                        _ = Task.Run(static () => NetworkManager.Instance.Disconnect());
                     }
                 }
+
+                GUILayout.Label($"State: {NetworkManager.Instance.state}");
+                GUILayout.Label($"IsConnected: {NetworkManager.Instance.IsConnected}");
 
                 if (Game.debug && Game.player != null)
                 {
@@ -57,20 +62,22 @@ namespace ShadyMP
 
         private void DrawConnectionUI(GUILayoutOption option)
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("IP Address:");
-            address = GUILayout.TextField(address, option);
-            GUILayout.EndHorizontal();
+            DrawInputField("Address", ref address, options: option);
+            DrawInputField("Port", ref port, options: option);
+            DrawInputField("UserName", ref username, 16, option);
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Port:");
-            port = GUILayout.TextField(port, option);
-            GUILayout.EndHorizontal();
-
-            if (GUILayout.Button("Connect") && int.TryParse(port, out int parsedPort))
+            if (GUILayout.Button("Connect") && ushort.TryParse(port, out ushort parsedPort))
             {
-                _ = NetworkManager.Instance.ConnectAsync(address, parsedPort);
+                _ = NetworkManager.Instance.ConnectAsync(address, parsedPort, name);
             }
+        }
+
+        private void DrawInputField(string label, ref string backing, int MaxLength = int.MaxValue, params GUILayoutOption[] options)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"{label}:");
+            backing = GUILayout.TextField(backing, MaxLength, options);
+            GUILayout.EndHorizontal();
         }
 
         private void FixedUpdate()

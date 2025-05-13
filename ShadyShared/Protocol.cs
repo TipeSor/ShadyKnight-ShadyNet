@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ShadyShared
@@ -16,9 +17,9 @@ namespace ShadyShared
             return payload;
         }
 
-        public static async Task WritePacketAsync(Stream stream, byte[] data)
+        public static async Task WritePacketAsync(Stream stream, byte[] data, CancellationToken token = default)
         {
-            await stream.WriteAsync(data, 0, data.Length);
+            await stream.WriteAsync(data, 0, data.Length, token);
         }
 
         public static (ProtocolID, byte[]) ParsePacket(byte[] payload)
@@ -33,24 +34,24 @@ namespace ShadyShared
             return (command, data);
         }
 
-        public static async Task<byte[]> ReadPacketAsync(Stream stream)
+        public static async Task<byte[]> ReadPacketAsync(Stream stream, CancellationToken token = default)
         {
             byte[] lengthBytes = new byte[4];
-            await ReadExactAsync(stream, lengthBytes, 0, 4);
+            await ReadExactAsync(stream, lengthBytes, 0, 4, token);
 
             int length = BitGood.ToInt(lengthBytes, 0);
             byte[] data = new byte[length];
-            await ReadExactAsync(stream, data, 0, length);
+            await ReadExactAsync(stream, data, 0, length, token);
 
             return data;
         }
 
-        public static async Task ReadExactAsync(Stream stream, byte[] buffer, int offset, int count)
+        public static async Task ReadExactAsync(Stream stream, byte[] buffer, int offset, int count, CancellationToken token = default)
         {
             int totalRead = 0;
             while (totalRead < count)
             {
-                int bytesRead = await stream.ReadAsync(buffer, totalRead + offset, count - totalRead);
+                int bytesRead = await stream.ReadAsync(buffer, totalRead + offset, count - totalRead, token);
                 if (bytesRead == 0)
                 {
                     throw new EndOfStreamException($"stream ended before all bytes were read. expected: `{count}`. got: `{totalRead}`");
@@ -66,10 +67,13 @@ namespace ShadyShared
         Client_InitUser                 = 0x00000000,
         Client_UpdateState              = 0x00000001,
         Client_Test                     = 0x00000002,
+        Client_Disconnect               = 0x00000004,
+        Client_RemoveUser               = 0x00000005,
 
         Server_VersionCheck             = 0x80000000,
         Server_UpdateState              = 0x80000001,
         Server_Test                     = 0x80000002,
+        Server_Disconnect               = 0x80000003
     }
 #pragma warning restore IDE0055
 }

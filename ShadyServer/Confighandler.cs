@@ -10,11 +10,13 @@ namespace ShadyServer
         private static readonly Dictionary<string, object> config = new()
         {
             { "address", IPAddress.Loopback},
-            { "port", (ushort)8080 }
+            { "port", (ushort)8080 },
+            { "verbose", true }
         };
 
         public static IPAddress Address => (IPAddress)config["address"];
         public static ushort Port => (ushort)config["port"];
+        public static bool Verbose => (bool)config["port"];
 
         public static void ParseConfig(string[] args)
         {
