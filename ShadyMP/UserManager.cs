@@ -80,11 +80,11 @@ namespace ShadyMP
 
             Vector3 old = userData.state.OldPosition;
             Vector3 next = userData.state.Position;
-            float t = Mathf.Clamp01(userData.TimeSinceData / 0.1f);
+            float t = Mathf.Clamp01(userData.TimeSinceData);
 
             userObject.transform.position = Vector3.Lerp(old, next, t);
 
-            userData.TimeSinceData += Time.fixedUnscaledDeltaTime;
+            userData.TimeSinceData += Time.fixedUnscaledDeltaTime / 0.01f;
         }
     }
 }

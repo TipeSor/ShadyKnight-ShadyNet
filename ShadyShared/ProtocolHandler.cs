@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Sockets;
 using System.Reflection;
 #pragma warning disable IDE0290
 namespace ShadyShared
@@ -66,13 +67,15 @@ namespace ShadyShared
         }
     }
 
-    public struct HandlerContext
+    public readonly struct HandlerContext
     {
-        public object[] objects;
+        public TcpClient Client { get; }
+        public object[] Other { get; }
 
-        public HandlerContext(object[] objects)
+        public HandlerContext(TcpClient client, params object[] objects)
         {
-            this.objects = objects;
+            Client = client;
+            Other = objects;
         }
     }
 }

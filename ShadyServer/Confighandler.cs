@@ -16,7 +16,7 @@ namespace ShadyServer
 
         public static IPAddress Address => (IPAddress)config["address"];
         public static ushort Port => (ushort)config["port"];
-        public static bool Verbose => (bool)config["port"];
+        public static bool Verbose => (bool)config["verbose"];
 
         public static void ParseConfig(string[] args)
         {

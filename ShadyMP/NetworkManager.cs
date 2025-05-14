@@ -21,7 +21,6 @@ namespace ShadyMP
         private CancellationToken Token => source.Token;
 
         private Task writingLoop;
-        private Task readingLoop;
 
         internal NetworkManager() { }
 
@@ -42,8 +41,9 @@ namespace ShadyMP
 
                 source = new();
 
-                writingLoop = Task.Run(ServerLoop);
-                readingLoop = Task.Run(ClientLoop);
+                Reader.Start();
+                Reader.Add(me);
+                writingLoop = Writer.WriteLoop(Token);
                 state = true;
             }
             catch (Exception ex)
@@ -57,7 +57,7 @@ namespace ShadyMP
         {
             try
             {
-                while (state)
+                while (!Token.IsCancellationRequested)
                 {
                     if (!stream.DataAvailable)
                     {
@@ -84,7 +84,7 @@ namespace ShadyMP
         {
             try
             {
-                while (state)
+                while (!Token.IsCancellationRequested)
                 {
                     if (Game.player == null)
                     {
@@ -95,14 +95,11 @@ namespace ShadyMP
                     self.Position = Game.player.t.position;
                     self.SceneName = SceneManager.GetActiveScene().name;
 
-
                     byte[] data = self.Serialize();
                     byte[] packet = Protocol.BuildPacket(ProtocolID.Server_UpdateState, data);
 
-                    Plugin.Logger.LogInfo($"SENT: {BitConverter.ToString(packet)}");
-
-                    await Protocol.WritePacketAsync(stream, packet, Token);
-
+                    WriteContext context = new(me, [stream], packet);
+                    Writer.EnqueueWrite(context);
                     await Task.Delay(30, Token);
                 }
             }
@@ -115,14 +112,8 @@ namespace ShadyMP
         internal async Task Disconnect()
         {
             source?.Cancel(false);
-            state = false;
 
-            if (readingLoop != null)
-            {
-                Plugin.Logger.LogInfo("Waiting for reading loop to finish");
-                await readingLoop;
-                Plugin.Logger.LogInfo("Reading loop finished");
-            }
+            await Reader.Stop();
 
             if (writingLoop != null)
             {
@@ -149,6 +140,9 @@ namespace ShadyMP
             me = null;
             Plugin.Logger.LogInfo("Networking variables nulled");
 
+            state = false;
+            Plugin.Logger.LogInfo("State has been set to false");
+
             Plugin.Logger.LogInfo("Cleaning up other user objects");
             UserManager.Instance.RemoveUsers();
         }
@@ -164,7 +158,6 @@ namespace ShadyMP
                 return;
             }
 
-            Plugin.Logger.LogInfo($"GOT:  {BitConverter.ToString(data)}");
             userData.state.Deserialize(data, 16);
         }
 
