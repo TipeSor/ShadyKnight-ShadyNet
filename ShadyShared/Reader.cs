@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -12,19 +11,8 @@ namespace ShadyShared
     public static class Reader
     {
         private static readonly ConcurrentDictionary<TcpClient, ReadContext> clients = [];
-        private static readonly List<Task> tasks = [];
-        public static Task[] Tasks
-        {
-            get
-            {
-                Task[] temp;
-                lock (tasks)
-                {
-                    temp = [.. tasks];
-                }
-                return temp;
-            }
-        }
+        private static readonly ConcurrentDictionary<TcpClient, Task> tasks = [];
+        public static event Action<TcpClient>? OnRemove;
 
         public static bool IsAcceptingNew { get; private set; } = false;
 
@@ -43,19 +31,28 @@ namespace ShadyShared
             }
         }
 
-        public static bool Remove(TcpClient client)
+        public static async Task<bool> RemoveAsync(TcpClient client)
         {
 
             if (clients.TryRemove(client, out ReadContext context))
             {
                 context.Source?.Cancel();
+                if (tasks.TryGetValue(client, out Task task))
+                {
+                    await task;
+                    if (!tasks.TryRemove(client, out _))
+                    {
+                        Logger.LogWarning($"failed to remove `{client.Client.RemoteEndPoint}` read task");
+                    }
+                }
                 context.Source?.Dispose();
                 return true;
             }
+
             return false;
         }
 
-        public static async Task Stop()
+        public static async Task StopAsync()
         {
             if (!IsAcceptingNew)
             {
@@ -64,10 +61,14 @@ namespace ShadyShared
             IsAcceptingNew = false;
             foreach (TcpClient client in clients.Keys.ToArray())
             {
-                try { _ = Remove(client); }
+                try { _ = await RemoveAsync(client); }
                 catch (Exception ex) { Logger.LogInfo($"{ex}"); }
             }
-            await Task.WhenAll(Tasks);
+            if (tasks.Count != 0)
+            {
+                Logger.LogWarning("not all tasks were stoped");
+            }
+
             tasks.Clear();
         }
 
@@ -89,9 +90,9 @@ namespace ShadyShared
         private static void StartReading(ReadContext context)
         {
             Task task = Task.Run(() => ClientReadLoop(context));
-            lock (tasks)
+            if (!tasks.TryAdd(context.Client, task))
             {
-                tasks.Add(task);
+                Logger.LogWarning($"failed to add reading loop for `{context.Client.Client.RemoteEndPoint}` to tasks");
             }
         }
 
@@ -120,7 +121,8 @@ namespace ShadyShared
             }
             finally
             {
-                _ = Remove(context.Client);
+                _ = RemoveAsync(context.Client);
+                OnRemove?.Invoke(context.Client);
             }
         }
 

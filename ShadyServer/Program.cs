@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -62,7 +61,7 @@ namespace ShadyServer
                 {
                     TcpClient client = await Server.AcceptTcpClientAsync();
                     Logger.LogInfo($"Client connected: {client.Client.RemoteEndPoint}");
-                    _ = Task.Run(() => UserHandler.HandleClient(client));
+                    _ = Task.Run(() => Reader.Add(client));
                 }
                 catch (Exception ex)
                 {
@@ -98,5 +97,4 @@ namespace ShadyServer
             WriteHandler.EnqueueWrite(new(WriteType.Share, client, data));
         }
     }
-
 }

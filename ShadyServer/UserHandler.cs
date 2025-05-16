@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -13,48 +12,6 @@ namespace ShadyServer
         public static bool TryGetData(TcpClient client, out UserData data)
         {
             return Users.TryGetValue(client, out data);
-        }
-
-        public static async Task HandleClient(TcpClient client)
-        {
-            try
-            {
-                NetworkStream stream = client.GetStream();
-
-                Users[client] = new() { Stream = stream };
-
-                while (client.Connected)
-                {
-                    byte[] data = await Protocol.ReadPacketAsync(stream);
-                    ProtocolHandler.HandlePacket(data, new([client]));
-                }
-
-            }
-            catch (System.IO.EndOfStreamException ex)
-            {
-                if (Config.Verbose)
-                {
-                    Logger.LogError($"Error handling client {client.Client.RemoteEndPoint}: {ex.Message}");
-                    Logger.LogError($"{ex.StackTrace}");
-                }
-                else
-                {
-                    Logger.LogError($"EOS exception from {client.Client.RemoteEndPoint}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError($"{ex.Message}");
-                Logger.LogError($"{ex.StackTrace}");
-            }
-            finally
-            {
-                Logger.LogInfo($"Client Disconnected: {client.Client.RemoteEndPoint}");
-                if (Users.ContainsKey(client))
-                {
-                    DisconnectUser(client);
-                }
-            }
         }
 
         public static async Task MainDataLoop()

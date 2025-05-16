@@ -1,11 +1,25 @@
-ShadyMP/bin/
-ShadyMP/obj/
+# Build results
+**/bin/
+**/obj/
+**/out/
+**/build/
+
+# Rider / VS Code / VS
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Dotnet CLI artifacts
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# OS trash
+.DS_Store
+Thumbs.db
+
+# Scripts
 ShadyMP/build.sh
-
-ShadyServer/bin/
-ShadyServer/obj/
-
-ShadyShared/bin/
-ShadyShared/obj/
-
-TestClient/

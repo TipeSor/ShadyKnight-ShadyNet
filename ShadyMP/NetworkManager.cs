@@ -43,6 +43,7 @@ namespace ShadyMP
 
                 Reader.Start();
                 Reader.Add(me);
+
                 writingLoop = Writer.WriteLoop(Token);
                 state = true;
             }
@@ -50,33 +51,6 @@ namespace ShadyMP
             {
                 Game.message.Show(ex.ToString());
                 Plugin.Logger.LogError(ex.ToString());
-            }
-        }
-
-        internal async Task ServerLoop()
-        {
-            try
-            {
-                while (!Token.IsCancellationRequested)
-                {
-                    if (!stream.DataAvailable)
-                    {
-                        await Task.Delay(10, Token);
-                        continue;
-                    }
-
-                    byte[] data = await Protocol.ReadPacketAsync(stream, Token);
-                    ProtocolHandler.HandlePacket(data, new());
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                Plugin.Logger.LogInfo("ServerLoop was canceled");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError(ex);
-                _ = Disconnect(); // clean up
             }
         }
 
@@ -113,7 +87,7 @@ namespace ShadyMP
         {
             source?.Cancel(false);
 
-            await Reader.Stop();
+            _ = Reader.StopAsync();
 
             if (writingLoop != null)
             {
