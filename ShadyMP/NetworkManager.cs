@@ -11,16 +11,18 @@ namespace ShadyMP
     {
         internal static NetworkManager Instance { get; } = new();
         internal bool IsConnected => me?.Connected ?? false;
+        internal bool IsDisconnecting = false;
         internal bool state = false;
 
         private TcpClient me;
         private NetworkStream stream;
         private UserState self;
 
+        private Reader reader;
+        private Writer writer;
+
         private CancellationTokenSource source;
         private CancellationToken Token => source.Token;
-
-        private Task writingLoop;
 
         internal NetworkManager() { }
 
@@ -34,18 +36,29 @@ namespace ShadyMP
                 stream = me.GetStream();
                 self = new UserState()
                 {
-                    Position = Game.player.t.position,
+                    Position = Game.player?.t.position ?? UnityEngine.Vector3.zero,
                     SceneName = SceneManager.GetActiveScene().name,
                     UserName = name
                 };
 
                 source = new();
 
-                Reader.Start();
-                Reader.Add(me);
+                reader = new();
+                reader.OnPacketReceived += static (TcpClient client, ProtocolID cmd, byte[] data) =>
+                {
+                    HandlerContext context = new(client);
+                    ProtocolHandler.Dispatch(cmd, data, context);
+                };
+                reader.OnClientDisconnected += static (TcpClient client, Exception ex) =>
+                {
+                    _ = Task.Run(Instance.Disconnect);
+                };
 
-                writingLoop = Writer.WriteLoop(Token);
+                writer = new();
+
                 state = true;
+
+                _ = Task.Run(ClientLoop);
             }
             catch (Exception ex)
             {
@@ -73,7 +86,7 @@ namespace ShadyMP
                     byte[] packet = Protocol.BuildPacket(ProtocolID.Server_UpdateState, data);
 
                     WriteContext context = new(me, [stream], packet);
-                    Writer.EnqueueWrite(context);
+                    writer.Enqueue(context);
                     await Task.Delay(30, Token);
                 }
             }
@@ -85,16 +98,13 @@ namespace ShadyMP
 
         internal async Task Disconnect()
         {
-            source?.Cancel(false);
-
-            _ = Reader.StopAsync();
-
-            if (writingLoop != null)
+            if (IsDisconnecting)
             {
-                Plugin.Logger.LogInfo("Waiting for writing loop to finish");
-                await writingLoop;
-                Plugin.Logger.LogInfo("Writing loop finished");
+                return;
             }
+
+            IsDisconnecting = true;
+            source?.Cancel(false);
 
             if (stream != null && IsConnected)
             {
@@ -105,11 +115,15 @@ namespace ShadyMP
             }
 
             source?.Dispose();
+            reader?.Dispose();
+            writer?.Dispose();
             stream?.Dispose();
             me?.Dispose();
             Plugin.Logger.LogInfo("Networking variables disposed");
 
             source = null;
+            reader = null;
+            writer = null;
             stream = null;
             me = null;
             Plugin.Logger.LogInfo("Networking variables nulled");
@@ -119,11 +133,17 @@ namespace ShadyMP
 
             Plugin.Logger.LogInfo("Cleaning up other user objects");
             UserManager.Instance.RemoveUsers();
-        }
 
+            IsDisconnecting = false;
+        }
+    }
+
+    public static class Commands
+    {
         [Protocol(ProtocolID.Client_UpdateState)]
         public static void Client_UpdateState(byte[] data, HandlerContext _)
         {
+            Plugin.Logger.LogInfo($"got state data");
             Guid guid = BitGood.ToGuid(data, 0);
             if (!UserManager.Instance.TryGetUser(guid, out UserData userData))
             {

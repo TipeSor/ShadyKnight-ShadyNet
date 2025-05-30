@@ -22,6 +22,7 @@ namespace ShadyMP
                 UserObject.name = $"User_{guid.ToString().Substring(0, 8)}";
 
                 users[guid] = new UserData(guid) { userObject = UserObject };
+                Plugin.Logger.LogInfo($"created user `{UserObject.name}`");
             });
         }
 

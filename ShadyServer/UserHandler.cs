@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using ShadyShared;
@@ -26,7 +27,10 @@ namespace ShadyServer
 
                     byte[] packet = Protocol.BuildPacket(ProtocolID.Client_UpdateState, data);
 
-                    await WriteHandler.EnqueueWriteAsync(new(WriteType.Share, client, packet));
+                    NetworkStream[] users = [.. Users.Keys.Where(u => u != client).Select(u => u.GetStream())];
+                    WriteContext context = new(client, users, packet);
+
+                    Program.writer.Enqueue(context);
                 }
                 await Task.Delay(100);
             }
@@ -43,8 +47,11 @@ namespace ShadyServer
             byte[] data = BitGood.GetBytes(clientData.Guid);
             byte[] packet = Protocol.BuildPacket(ProtocolID.Client_RemoveUser, data);
 
-            WriteHandler.EnqueueWrite(new(WriteType.Share, client, packet));
-            client.Dispose();
+            NetworkStream[] users = [.. Users.Keys.Select(static u => u.GetStream())];
+            WriteContext context = new(client, users, packet) { Dispose = true };
+            Program.writer.Enqueue(context);
+
+            Logger.LogInfo($"user {client.Client.RemoteEndPoint} disconnected (server)");
         }
     }
 }

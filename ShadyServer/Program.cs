@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using ShadyShared;
 #pragma warning disable CA1707 
@@ -11,6 +13,11 @@ namespace ShadyServer
         public static TcpListener Server { get; set; }
         public static bool IsRunning { get; set; }
 
+        public static CancellationTokenSource Source { get; private set; } = new();
+        public static CancellationToken Token => Source.Token;
+
+        public static Reader reader;
+        public static Writer writer;
 
         public static void Main(string[] args)
         {
@@ -33,9 +40,21 @@ namespace ShadyServer
                 Server.Start();
                 IsRunning = true;
 
+                writer = new();
+                reader.OnPacketReceived += static (TcpClient client, ProtocolID cmd, byte[] data) =>
+                {
+                    HandlerContext context = new(client);
+                    ProtocolHandler.Dispatch(cmd, data, context);
+                };
+                reader.OnClientDisconnected += static (TcpClient client, Exception ex) =>
+                {
+                    UserHandler.DisconnectUser(client);
+                };
+
+                reader = new();
+
                 _ = Task.Run(static () => ListenForClients());
                 _ = Task.Run(static () => UserHandler.MainDataLoop());
-                _ = Task.Run(static () => WriteHandler.WriteLoop());
 
                 while (IsRunning)
                 {
@@ -61,7 +80,7 @@ namespace ShadyServer
                 {
                     TcpClient client = await Server.AcceptTcpClientAsync();
                     Logger.LogInfo($"Client connected: {client.Client.RemoteEndPoint}");
-                    _ = Task.Run(() => Reader.Add(client));
+                    _ = Task.Run(() => reader.AddClient(client));
                 }
                 catch (Exception ex)
                 {
@@ -86,15 +105,15 @@ namespace ShadyServer
         public static void Server_Disconnect(byte[] _, HandlerContext context)
         {
             TcpClient client = context.Client;
-            Logger.LogInfo($"user `{client.Client.RemoteEndPoint}`");
+            Logger.LogInfo($"user `{client.Client.RemoteEndPoint}` disconnected (user)");
             UserHandler.DisconnectUser(client);
         }
 
         [Protocol(ProtocolID.Server_Test)]
         public static void Server_Test(byte[] data, HandlerContext context)
         {
-            TcpClient client = context.Client;
-            WriteHandler.EnqueueWrite(new(WriteType.Share, client, data));
+            NetworkStream[] users = [.. UserHandler.Users.Keys.Where(u => u != context.Client).Select(u => u.GetStream())];
+            WriteContext writeContext = new(context.Client, users, data);
         }
     }
 }
