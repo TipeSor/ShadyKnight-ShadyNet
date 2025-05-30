@@ -6,42 +6,64 @@ using System.Threading.Tasks;
 
 namespace ShadyShared
 {
-    public static class Writer
+    public class Writer
     {
-        public static readonly ConcurrentQueue<WriteContext> WriteQueue = [];
-        public static SemaphoreSlim signal = new(0);
+        public ConcurrentQueue<WriteContext> WriteQueue { get; } = new ConcurrentQueue<WriteContext>();
+        private readonly CancellationTokenSource source = new();
+        private readonly Task writingLoop;
+        private bool disposed;
 
-        public static void EnqueueWrite(WriteContext context)
+        public Writer()
         {
-            WriteQueue.Enqueue(context);
-            _ = signal.Release();
+            writingLoop = Task.Run(() => RunAsync(source.Token));
         }
 
-        public static async Task WriteLoop(CancellationToken token)
+        private async Task RunAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
-                await signal.WaitAsync();
-                while (WriteQueue.TryDequeue(out WriteContext context))
+                if (!WriteQueue.TryDequeue(out WriteContext? context))
                 {
-                    foreach (NetworkStream reciever in context.Reciever ?? [])
+                    await Task.Delay(10, token).ConfigureAwait(false);
+                    continue;
+                }
+
+                foreach (NetworkStream stream in context.Reciever)
+                {
+                    try
                     {
-                        try
-                        {
-                            await Protocol.WritePacketAsync(reciever, context.Data, token);
-                        }
-                        catch (TaskCanceledException) when (token.IsCancellationRequested)
-                        {
-                            Logger.LogInfo("Write loop was canceled");
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.LogError($"{ex}");
-                        }
+                        await Protocol.WritePacketAsync(stream, context.Data, token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Dispatcher] Write failed: {ex.Message}");
                     }
                 }
+
+                if (context.Dispose)
+                {
+                    context.Sender.Close();
+                }
             }
+        }
+
+        public void Enqueue(WriteContext context)
+        {
+            WriteQueue.Enqueue(context);
+        }
+
+        public void Dispose()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+
+            source.Cancel();
+            writingLoop.Wait();
+            source.Dispose();
         }
     }
 
@@ -50,5 +72,6 @@ namespace ShadyShared
         public TcpClient Sender { get; } = sender;
         public NetworkStream[] Reciever { get; } = receivers;
         public byte[] Data { get; } = data;
+        public bool Dispose { get; set; } = false;
     }
 }

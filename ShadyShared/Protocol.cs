@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,24 +18,24 @@ namespace ShadyShared
             return payload;
         }
 
-        public static async Task WritePacketAsync(Stream stream, byte[] data, CancellationToken token = default)
-        {
-            await stream.WriteAsync(data, 0, data.Length, token);
-        }
-
         public static (ProtocolID, byte[]) ParsePacket(byte[] payload)
         {
             uint protocolNumber = BitGood.ToUInt(payload, 0);
             if (!Enum.IsDefined(typeof(ProtocolID), protocolNumber))
             {
-                throw new KeyNotFoundException($"key `{protocolNumber}` not found in `ProtocolID`");
+                Logger.LogError($"key `{protocolNumber}` not found in `ProtocolID`");
             }
             ProtocolID command = (ProtocolID)protocolNumber;
             byte[] data = BitGood.ExtractBytes(payload, 4, payload.Length - 4);
             return (command, data);
         }
 
-        public static async Task<byte[]> ReadPacketAsync(Stream stream, CancellationToken token = default)
+        public static async Task WritePacketAsync(NetworkStream stream, byte[] data, CancellationToken token = default)
+        {
+            await stream.WriteAsync(data, 0, data.Length, token);
+        }
+
+        public static async Task<byte[]> ReadPacketAsync(NetworkStream stream, CancellationToken token = default)
         {
             byte[] lengthBytes = new byte[4];
             await ReadExactAsync(stream, lengthBytes, 0, 4, token);
@@ -46,7 +47,7 @@ namespace ShadyShared
             return data;
         }
 
-        public static async Task ReadExactAsync(Stream stream, byte[] buffer, int offset, int count, CancellationToken token = default)
+        public static async Task ReadExactAsync(NetworkStream stream, byte[] buffer, int offset, int count, CancellationToken token = default)
         {
             int totalRead = 0;
             while (totalRead < count)

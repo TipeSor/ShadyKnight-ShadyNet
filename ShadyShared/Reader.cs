@@ -1,137 +1,77 @@
 using System;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Linq;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace ShadyShared
 {
-    public static class Reader
+    public class Reader : IDisposable
     {
-        private static readonly ConcurrentDictionary<TcpClient, ReadContext> clients = [];
-        private static readonly ConcurrentDictionary<TcpClient, Task> tasks = [];
-        public static event Action<TcpClient>? OnRemove;
+        private readonly ConcurrentDictionary<TcpClient, CancellationTokenSource> clients = [];
+        private bool disposed;
 
-        public static bool IsAcceptingNew { get; private set; } = false;
+        public event Action<TcpClient, ProtocolID, byte[]>? OnPacketReceived;
+        public event Action<TcpClient, Exception>? OnClientDisconnected;
 
-        public static void Add(TcpClient client)
+        public void AddClient(TcpClient client)
         {
-            if (!IsAcceptingNew)
+            if (disposed)
             {
-                return;
+                throw new ObjectDisposedException(nameof(Reader));
             }
 
-            ReadContext context = new(client, new());
-            if (clients.TryAdd(client, context))
+            CancellationTokenSource source = new();
+            if (clients.TryAdd(client, source))
             {
-                StartReading(context);
-                Logger.LogInfo($"Started reading from {context.Client.Client.RemoteEndPoint}");
-            }
-        }
-
-        public static async Task<bool> RemoveAsync(TcpClient client)
-        {
-
-            if (clients.TryRemove(client, out ReadContext context))
-            {
-                context.Source?.Cancel();
-                if (tasks.TryGetValue(client, out Task task))
-                {
-                    await task;
-                    if (!tasks.TryRemove(client, out _))
-                    {
-                        Logger.LogWarning($"failed to remove `{client.Client.RemoteEndPoint}` read task");
-                    }
-                }
-                context.Source?.Dispose();
-                return true;
-            }
-
-            return false;
-        }
-
-        public static async Task StopAsync()
-        {
-            if (!IsAcceptingNew)
-            {
-                return;
-            }
-            IsAcceptingNew = false;
-            foreach (TcpClient client in clients.Keys.ToArray())
-            {
-                try { _ = await RemoveAsync(client); }
-                catch (Exception ex) { Logger.LogInfo($"{ex}"); }
-            }
-            if (tasks.Count != 0)
-            {
-                Logger.LogWarning("not all tasks were stoped");
-            }
-
-            tasks.Clear();
-        }
-
-        public static void Start()
-        {
-            IsAcceptingNew = true;
-        }
-
-        public static TcpClient[] GetClients()
-        {
-            return [.. clients.Keys];
-        }
-
-        public static ReadContext[] GetContexts()
-        {
-            return [.. clients.Values];
-        }
-
-        private static void StartReading(ReadContext context)
-        {
-            Task task = Task.Run(() => ClientReadLoop(context));
-            if (!tasks.TryAdd(context.Client, task))
-            {
-                Logger.LogWarning($"failed to add reading loop for `{context.Client.Client.RemoteEndPoint}` to tasks");
+                _ = Task.Run(() => HandleClientAsync(client, source.Token), source.Token);
             }
         }
 
-        private static async Task ClientReadLoop(ReadContext context)
+        public void RemoveClient(TcpClient client)
+        {
+            if (clients.TryRemove(client, out CancellationTokenSource? source))
+            {
+                source.Cancel();
+                source.Dispose();
+                client.Close();
+            }
+        }
+
+        private async Task HandleClientAsync(TcpClient client, CancellationToken token)
         {
             try
             {
-                while (!context.Token.IsCancellationRequested)
+                NetworkStream stream = client.GetStream();
+                while (!token.IsCancellationRequested)
                 {
-                    byte[] packet = await Protocol.ReadPacketAsync(context.Stream, context.Token);
-                    (ProtocolID id, byte[] data) = Protocol.ParsePacket(packet);
-                    ProtocolHandler.Dispatch(id, data, new(context.Client));
+                    byte[] packet = await Protocol.ReadPacketAsync(stream, token).ConfigureAwait(false);
+                    (ProtocolID cmd, byte[] data) = Protocol.ParsePacket(packet);
+                    OnPacketReceived?.Invoke(client, cmd, data);
                 }
-            }
-            catch (TaskCanceledException) when (context.Token.IsCancellationRequested)
-            {
-                Logger.LogInfo($"Client read was cancelled");
-            }
-            catch (EndOfStreamException)
-            {
-                Logger.LogWarning($"EOS from {context.Client.Client.RemoteEndPoint}");
             }
             catch (Exception ex)
             {
-                Logger.LogError($"{ex}");
-            }
-            finally
-            {
-                _ = RemoveAsync(context.Client);
-                OnRemove?.Invoke(context.Client);
+                OnClientDisconnected?.Invoke(client, ex);
+                RemoveClient(client);
             }
         }
 
-        public class ReadContext(TcpClient client, CancellationTokenSource source)
+        public void Dispose()
         {
-            public TcpClient Client { get; } = client;
-            public NetworkStream Stream { get; } = client.GetStream();
-            public CancellationTokenSource Source { get; } = source;
-            public CancellationToken Token => Source.Token;
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+
+            foreach (TcpClient client in clients.Keys)
+            {
+                RemoveClient(client);
+            }
+
+            clients.Clear();
         }
     }
 }

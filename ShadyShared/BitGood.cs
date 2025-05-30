@@ -8,131 +8,129 @@ namespace ShadyShared
     {
         public static byte[] GetBytes(bool value)
         {
-            byte[] bytes = BitConverter.GetBytes(value);
-            return bytes;
+            return [(value ? (byte)1 : (byte)0)];
         }
 
         public static bool ToBool(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 1);
-            bytes = FixBytes(bytes);
             return BitConverter.ToBoolean(bytes, 0);
         }
 
         public static byte[] GetBytes(char value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static char ToChar(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 2);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToChar(bytes, 0);
         }
 
         public static byte[] GetBytes(double value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static double ToDouble(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 8);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToDouble(bytes, 0);
         }
 
         public static byte[] GetBytes(short value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static short ToShort(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 2);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToInt16(bytes, 0);
         }
 
         public static byte[] GetBytes(int value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static int ToInt(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 4);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToInt32(bytes, 0);
         }
 
         public static byte[] GetBytes(long value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static long ToLong(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 8);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToInt64(bytes, 0);
         }
 
         public static byte[] GetBytes(float value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static float ToFloat(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 4);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToSingle(bytes, 0);
         }
 
         public static byte[] GetBytes(ushort value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static ushort ToUShort(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 2);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToUInt16(bytes, 0);
         }
 
         public static byte[] GetBytes(uint value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static uint ToUInt(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 4);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToUInt32(bytes, 0);
         }
 
         public static byte[] GetBytes(ulong value)
         {
             byte[] bytes = BitConverter.GetBytes(value);
-            return FixBytes(bytes);
+            return EndianCorrection(bytes);
         }
 
         public static ulong ToULong(byte[] value, int startIndex)
         {
             byte[] bytes = ExtractBytes(value, startIndex, 8);
-            bytes = FixBytes(bytes);
+            bytes = EndianCorrection(bytes);
             return BitConverter.ToUInt64(bytes, 0);
         }
 
@@ -223,7 +221,7 @@ namespace ShadyShared
             return segment;
         }
 
-        public static byte[] FixBytes(byte[] bytes)
+        public static byte[] EndianCorrection(byte[] bytes)
         {
             return BitConverter.IsLittleEndian ? bytes : [.. bytes.Reverse()];
         }
